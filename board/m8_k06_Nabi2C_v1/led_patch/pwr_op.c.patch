@@ -1,0 +1,94 @@
+diff --git a/arch/arm/cpu/aml_meson/m8/firmware/arc_power/pwr_op.c b/arch/arm/cpu/aml_meson/m8/firmware/arc_power/pwr_op.c
+index ec11ba5..6a66d35 100755
+--- a/arch/arm/cpu/aml_meson/m8/firmware/arc_power/pwr_op.c
++++ b/arch/arm/cpu/aml_meson/m8/firmware/arc_power/pwr_op.c
+@@ -532,11 +532,18 @@ void rn5t618_power_on_at_32K_2()        // need match power sequence of power_of
+ unsigned int rn5t618_detect_key(unsigned int flags)
+ {
+     int delay_cnt   = 0;
++    int delay_cnt_led = 0;
+     int power_status;
+     int prev_status;
+     int battery_voltage;
+     int ret = FLAG_WAKEUP_PWRKEY;
+     int low_bat_cnt = 0;
++    int hight_bat_cnt = 8;
++    int pre_battery_voltage=0;
++    int yellow_led_on = 1;
++    int battery_voltage_diff=0;
++    int delay_time_out = 4000;
++    unsigned int reg_val;
+ 
+ #ifdef CONFIG_IR_REMOTE_WAKEUP
+     //backup the remote config (on arm)
+@@ -557,6 +564,7 @@ unsigned int rn5t618_detect_key(unsigned int flags)
+ 	writel(1<<8,0xc810008c); //clear intr
+ */
+ 	prev_status = get_charging_state();
++    pre_battery_voltage = pmu_get_battery_voltage();
+     do {
+         /*
+          * when extern power status has changed, we need break
+@@ -572,7 +580,22 @@ unsigned int rn5t618_detect_key(unsigned int flags)
+             exit_reason = 1;
+             break;
+         }
++
++        reg_val = readl(0xc8100024);
++        reg_val &= (1 << 29);//red led off
++
++        if((!power_status) || (!reg_val))
++        {
++                if (yellow_led_on == 1)
++                {
++                    reg_val = readl(0xc8100024);
++                    reg_val &= ~(1 << 31);
++                    writel(reg_val,0xc8100024);
++                    yellow_led_on = 0;
++                }
++        }
+         delay_cnt++;
++        delay_cnt_led++;
+ 
+     #if defined(CONFIG_ENABLE_PMU_WATCHDOG) || defined(CONFIG_RESET_TO_SYSTEM)
+         pmu_feed_watchdog(flags);
+@@ -613,6 +636,39 @@ unsigned int rn5t618_detect_key(unsigned int flags)
+             delay_cnt = 0;
+         }
+ 
++        if(delay_cnt_led > delay_time_out)
++        {  
++                battery_voltage = pmu_get_battery_voltage();
++                battery_voltage_diff = battery_voltage-pre_battery_voltage;
++
++                if (((battery_voltage & 0xffff) > 4100) && (battery_voltage & 0xffff)) 
++                {
++
++                    if( battery_voltage_diff < 100 )
++                    {
++                         if (hight_bat_cnt > 0) 
++                        {
++                            exit_reason = 8;
++                            break;
++                        }
++                        hight_bat_cnt--;
++
++                        if( (battery_voltage_diff > 50) && (hight_bat_cnt = 2) )
++                        {
++                            delay_time_out += 800;
++                            //hight_bat_cnt += 2 ;
++                        }
++                        
++                        pre_battery_voltage = battery_voltage;
++                    }
++
++
++                }
++
++            delay_cnt_led = 0;
++        }
++
++
+ #ifdef CONFIG_IR_REMOTE_WAKEUP
+         if(remote_detect_key()){
+             exit_reason = 6;

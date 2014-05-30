@@ -1,0 +1,14 @@
+diff --git a/arch/arm/cpu/aml_meson/common/firmware/power.c b/arch/arm/cpu/aml_meson/common/firmware/power.c
+index a9ab28e..bb8073c 100755
+--- a/arch/arm/cpu/aml_meson/common/firmware/power.c
++++ b/arch/arm/cpu/aml_meson/common/firmware/power.c
+@@ -1279,6 +1279,9 @@ void power_init(int init_mode)
+ {
+     hard_i2c_init();
+     
++    //close charged_full_led
++    clrbits_le32(P_AO_GPIO_O_EN_N,1<<31);
++
+     __udelay(1000);
+ #ifdef CONFIG_AW_AXP20
+     axp20_power_init(init_mode);
