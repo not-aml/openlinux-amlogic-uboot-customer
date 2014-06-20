@@ -1,0 +1,185 @@
+diff --git a/drivers/power/rn5t618.c b/drivers/power/rn5t618.c
+index 36ac8bc..b2e85f8 100755
+--- a/drivers/power/rn5t618.c
++++ b/drivers/power/rn5t618.c
+@@ -6,6 +6,7 @@
+ #include <aml_i2c.h>
+ #include <amlogic/aml_lcd.h>
+ #include <amlogic/rn5t618.h>
++#include <asm/arch/io.h>
+ 
+ #include <amlogic/aml_pmu_common.h>
+ #ifdef CONFIG_UBOOT_BATTERY_PARAMETERS
+@@ -20,6 +21,11 @@ int rn5t618_battery_calibrate(void);
+ #define MAX_BUF         100
+ #define RN5T618_ADDR    0x32
+ 
++#define GPIOAO_13 13
++#define P_AO_GPIO_O_EN_N                (0xc8100024)
++extern void mdelay(unsigned long msec);
++extern int gpio_direction_output(unsigned gpio, int value);
++
+ #define DBG(format, args...) printf("[RN5T618]"format,##args)
+ static int rn5t618_curr_dir = 0;
+ static int rn5t618_battery_test = 0;
+@@ -536,6 +542,136 @@ int rn5t618_set_recharge_voltage(int voltage)
+     return rn5t618_set_bits(0x00BB, bits, 0x07);
+ }
+ 
++static int led_control = 1;
++static int pre_chg_led_state = 0;
++static int chg_led_state = 1;
++static int first_init = 1;
++static int yellow_led_on = 0;
++
++#define no_ext_power 0
++#define charging     1
++#define charge_full  2
++
++static int charging_led_enable(int enable)
++{
++    if(enable==no_ext_power)
++    {   
++        //close charging_led
++        setbits_le32(P_AO_GPIO_O_EN_N,1<<29);//charging_led
++        yellow_led_on = 1;
++        
++        
++        //close charged_full_led
++        clrbits_le32(P_AO_GPIO_O_EN_N,1<<31);
++        mdelay(50);
++    }
++    else if(enable==charging)
++    {
++        //close charged_full_led
++        clrbits_le32(P_AO_GPIO_O_EN_N,1<<31);
++        mdelay(50);
++
++        //open charging_led                        
++        clrbits_le32(P_AO_GPIO_O_EN_N,1<<29);//charging_led
++        mdelay(50); 
++    }
++    else if(enable==charge_full)
++    {
++        //open charged_full_led
++        setbits_le32(P_AO_GPIO_O_EN_N,1<<31);
++        mdelay(50);
++
++        //close charging_led
++        setbits_le32(P_AO_GPIO_O_EN_N,1<<29);//charging_led
++        yellow_led_on = 1;
++        mdelay(50);
++    }
++}
++
++int rn5t618_chg_led_control(int battery_percent)
++{
++    int ext_valid = rn5t618_charger_online();
++    int i=0;
++
++    //printf("##### %s battery_percent= %d\n", __func__, battery_percent); 
++    //printf("ext_valid = %d \n", ext_valid);
++    
++    //printf("chg_led_state = %d\n pre_chg_led_state = %d\n", chg_led_state, pre_chg_led_state); 
++    
++    
++    if (!ext_valid) 
++    {
++        chg_led_state = 0;
++        yellow_led_on = 0;
++
++        if ( chg_led_state != pre_chg_led_state)
++        {
++            {
++
++                charging_led_enable(no_ext_power);
++            }
++            pre_chg_led_state = chg_led_state;
++        }
++
++        printf("###### %s no EXTERN power!\n", __func__); 
++        return ;
++    }
++    else
++    {
++
++            chg_led_state = 1;
++            
++            //printf("##### %s set GPIO_13 EN!\n", __func__); 
++            clrbits_le32(P_AO_GPIO_O_EN_N,1<<13);
++            mdelay(30);
++
++            if( battery_percent >= 100)
++            {
++                if(!yellow_led_on)
++                {
++                    printf("==== %s: open charged_full_led\n", __func__);
++
++                    charging_led_enable(charge_full);
++                }
++                
++            }
++
++                if(chg_led_state != pre_chg_led_state)
++                {
++                  
++                    //while(1)
++                    {                  
++                          if( battery_percent < 100)
++                          {
++                            
++                            printf("==== %s: open charging_led\n", __func__);
++                            charging_led_enable(charging);
++
++        #if 0                       
++                            printf("==== %s: open charged_full_led\n", __func__);
++                            charging_led_enable(charge_full);
++                            mdelay(1000);
++                            if(i > 2)
++                            {
++                                break;
++                            }
++                            i++;
++
++        #endif  
++                            //break;
++                           } 
++                    }
++
++                    pre_chg_led_state = chg_led_state;
++
++            }
++
++    }
++ 
++    return 0;
++}
++
++
+ int rn5t618_inti_para(struct battery_parameter *battery)
+ {
+     if (battery) {
+@@ -625,6 +761,8 @@ static int rn5t618_reset_flag_operation(int op)
+ int rn5t618_init(void)
+ {
+     uint8_t buf[10];
++    int ret;
++    //charging_led_enable(0);
+ 
+ #ifdef CONFIG_RESET_TO_SYSTEM
+     rn5t618_read(0x0007, buf);
+@@ -699,6 +837,14 @@ int rn5t618_init(void)
+     rn5t618_set_bits(0x00BB, 0x00, 0x80);                       // set VWEAK to 3.0v
+     udelay(100 * 1000);                                         // delay a short time
+ 
++    ret = gpio_request(GPIOAO_13, "charging_led");
++    printf("#### rn5t618_init():request GPIO:%d\n",(int)GPIOAO_13);
++    if (ret < 0)
++    {
++        printf("Failed to request GPIO:%d, ERRNO:%d\n",(int)GPIOAO_13,ret);
++        return ret;
++
++    }  
+ //    dump_pmu_register();
+ 
+     return 0;
