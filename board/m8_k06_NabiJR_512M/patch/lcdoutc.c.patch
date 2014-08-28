@@ -1,0 +1,60 @@
+diff --git a/arch/arm/cpu/aml_meson/m8/lcdoutc.c b/arch/arm/cpu/aml_meson/m8/lcdoutc.c
+index adb5abe..ff19a51 100755
+--- a/arch/arm/cpu/aml_meson/m8/lcdoutc.c
++++ b/arch/arm/cpu/aml_meson/m8/lcdoutc.c
+@@ -1059,38 +1059,39 @@ static void vclk_set_lcd(int lcd_type, int vclk_sel, unsigned long pll_reg, unsi
+ 			break;
+ 		case 0:
+ 		default:
+-			ss_level = 0;
+ 			break;
+ 	}
+ 	
++	WRITE_LCD_CBUS_REG_BITS(HHI_VID_PLL_CNTL5, 1, 16, 1);//enable bandgap
+ 	switch (pll_level) {
+ 		case 1:
+-			pll_ctrl3 = (ss_level > 0) ? 0xca7e3823 : 0xca45b823;
+-			od_fb = 0;
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL2, pll_ctrl2);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL3, 0xca45b823);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL4, pll_ctrl4);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL5, 0x00700001);	//[8] od_fb
+ 			break;
+ 		case 2:
+ 			pll_ctrl2 |= (1<<19);//special adjust
+-			pll_ctrl3 = (ss_level > 0) ? 0xca7e3823 : 0xca49b823;
+-			od_fb = 1;
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL2, pll_ctrl2);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL3, 0xca49b823);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL4, pll_ctrl4);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL5, 0x00700101);
+ 			break;
+ 		case 3:
+-			pll_ctrl3 = (ss_level > 0) ? 0xca7e3823 : 0xca49b823;
+-			od_fb = 1;
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL2, pll_ctrl2);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL3, 0xca49b823);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL4, pll_ctrl4);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL5, 0x00700101);
+ 			break;
+ 		case 4:
+-			pll_ctrl3 = (ss_level > 0) ? 0xca7e3823 : 0xce49c022;
+-			od_fb = 1;
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL2, pll_ctrl2);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL3, 0xce49c022);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL4, pll_ctrl4);
++			WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL5, 0x00700101);
+ 			break;
+ 		default:
+-			pll_ctrl3 = 0xca7e3823;
+-			od_fb = 0;
+ 			break;
+ 	}
+-	WRITE_LCD_CBUS_REG_BITS(HHI_VID_PLL_CNTL5, 1, 16, 1);//enable bandgap
+-	WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL2, pll_ctrl2);
+-	WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL3, pll_ctrl3);
+-	WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL4, pll_ctrl4);
+-	WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL5, (0x00700001 | (od_fb << 8)));	//[8] od_fb
+ 	WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL, pll_reg | (1 << PLL_CTRL_RST));
+ 	WRITE_LCD_CBUS_REG(HHI_VID2_PLL_CNTL, pll_reg);
+ #endif
